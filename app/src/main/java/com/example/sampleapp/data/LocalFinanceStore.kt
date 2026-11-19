@@ -97,4 +97,32 @@ object LocalFinanceStore {
                 "Offline M-Pesa monitor active. New M-Pesa messages will appear below for you to describe."
         }
     }
+    private const val KEY_PARTNER_PIN = "partner_pin"
+    private const val KEY_UNLOCK_UNTIL = "settings_unlock_until"
+
+    fun setPartnerPin(context: Context, pin: String) {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_PARTNER_PIN, pin).apply()
+    }
+
+    fun hasPartnerPin(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        return !prefs.getString(KEY_PARTNER_PIN, null).isNullOrEmpty()
+    }
+
+    fun verifyAndTemporarilyUnlock(context: Context, enteredPin: String): Boolean {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        val savedPin = prefs.getString(KEY_PARTNER_PIN, null) ?: return false
+        if (savedPin == enteredPin) {
+            // Unlock Settings access for 60 seconds so the partner can manage permissions
+            prefs.edit().putLong(KEY_UNLOCK_UNTIL, System.currentTimeMillis() + 60_000L).apply()
+            return true
+        }
+        return false
+    }
+
+    fun isTemporarilyUnlocked(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        return System.currentTimeMillis() < prefs.getLong(KEY_UNLOCK_UNTIL, 0L)
+    }
 }
