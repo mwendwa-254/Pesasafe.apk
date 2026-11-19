@@ -7,7 +7,7 @@
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_safepesa"
-        android:label="SafePesa Recovery"
+        android:label="SafePesa"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
@@ -21,23 +21,45 @@
             </intent-filter>
         </activity>
 
+        <!-- Partner PIN Lock Screen -->
+        <activity
+            android:name=".PartnerPinLockActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance" />
+
+        <!-- Device Admin Uninstall Blocker -->
+        <receiver
+            android:name=".service.SafePesaAdminReceiver"
+            android:description="@string/app_name"
+            android:exported="true"
+            android:label="SafePesa Uninstall Shield"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin_policies" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
         <!-- 1. Offline M-Pesa Notification Listener -->
         <service
             android:name=".service.MpesaNotificationService"
+            android:exported="true"
             android:label="SafePesa M-Pesa Reader"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-            android:exported="true">
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
 
-        <!-- 2. Non-VPN Crash Game & Betting Blocker -->
+        <!-- 2. Non-VPN Crash Game & Settings Guard -->
         <service
             android:name=".service.GamblingBlockerService"
+            android:exported="true"
             android:label="SafePesa Crash-Game Blocker"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true">
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
@@ -46,7 +68,6 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <!-- Receiver for quick-tagging M-Pesa transactions from notifications -->
         <receiver
             android:name=".service.TagTransactionReceiver"
             android:exported="false" />
