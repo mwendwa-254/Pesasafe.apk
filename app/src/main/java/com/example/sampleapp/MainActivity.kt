@@ -210,6 +210,15 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshDashboard()
+
+        // If partner PIN was just set and overlay permission was just granted, prompt Device Admin next
+        if (LocalFinanceStore.hasPartnerPin(this) && Settings.canDrawOverlays(this)) {
+            val dpm = getSystemService(DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            val adminComponent = ComponentName(this, SafePesaAdminReceiver::class.java)
+            if (!dpm.isAdminActive(adminComponent)) {
+                launchDeviceAdminPrompt()
+            }
+        }
     }
 
     private fun refreshDashboard() {
