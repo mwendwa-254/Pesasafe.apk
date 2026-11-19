@@ -3,103 +3,188 @@ package com.example.sampleapp
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
+import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import com.example.sampleapp.data.LocalFinanceStore
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var lossText: TextView
+    private lateinit var netBalanceText: TextView
+    private lateinit var healthBadgeText: TextView
+    private lateinit var moneyInText: TextView
+    private lateinit var moneyOutText: TextView
+    private lateinit var gamblingLossText: TextView
     private lateinit var adviceText: TextView
     private lateinit var txContainer: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val scroll = ScrollView(this)
+        window.statusBarColor = Color.parseColor("#064E3B")
+
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(Color.parseColor("#F1F5F9"))
+        }
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(40, 48, 40, 48)
         }
         scroll.addView(root)
 
-        val title = TextView(this).apply {
-            text = "SafePesa Recovery (100% Offline)"
-            textSize = 22f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.BLACK)
+        // 1. TOP FINTECH HEADER (Deep Emerald)
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#064E3B"))
+            setPadding(48, 56, 48, 64)
         }
-        root.addView(title)
 
-        // Setup Buttons
-        val btnRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 24, 0, 24)
-        }
-        val btnMpesa = Button(this).apply {
-            text = "1. Enable M-Pesa Reader"
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            setOnClickListener { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
-        }
-        val btnBlocker = Button(this).apply {
-            text = "2. Enable Game Blocker"
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            setOnClickListener { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-        }
-        btnRow.addView(btnMpesa)
-        btnRow.addView(btnBlocker)
-        root.addView(btnRow)
-
-        // Gambling Loss Banner
-        lossText = TextView(this).apply {
-            textSize = 18f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.parseColor("#B71C1C"))
-            setBackgroundColor(Color.parseColor("#FFEBEE"))
-            setPadding(32, 32, 32, 32)
-        }
-        root.addView(lossText)
-
-        // Financial Advisor Box
-        adviceText = TextView(this).apply {
-            textSize = 15f
-            setTextColor(Color.parseColor("#1B5E20"))
-            setBackgroundColor(Color.parseColor("#E8F5E9"))
-            setPadding(32, 32, 32, 32)
-        }
-        val adviceParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = 24; bottomMargin = 32 }
-        root.addView(adviceText, adviceParams)
-
-        // Ledger Header + Refresh Button
-        val headerRow = LinearLayout(this).apply {
+        val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val ledgerTitle = TextView(this).apply {
-            text = "M-Pesa Ledger (Describe Transactions)"
-            textSize = 17f
+        val appTitle = TextView(this).apply {
+            text = "SafePesa"
+            textSize = 24f
             setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        val refreshBtn = Button(this).apply {
-            text = "Refresh"
+        val offlineBadge = TextView(this).apply {
+            text = "100% ON-DEVICE"
+            textSize = 11f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#A7F3D0"))
+            background = makePill("#047857", 24f)
+            setPadding(24, 10, 24, 10)
+        }
+        topBar.addView(appTitle)
+        topBar.addView(offlineBadge)
+        header.addView(topBar)
+
+        val netLabel = TextView(this).apply {
+            text = "Tracked Net Cash Flow"
+            textSize = 13f
+            setTextColor(Color.parseColor("#A7F3D0"))
+            setPadding(0, 32, 0, 4)
+        }
+        header.addView(netLabel)
+
+        netBalanceText = TextView(this).apply {
+            text = "Ksh 0.00"
+            textSize = 32f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+        }
+        header.addView(netBalanceText)
+
+        healthBadgeText = TextView(this).apply {
+            textSize = 13f
+            setTextColor(Color.parseColor("#ECFDF5"))
+            setPadding(0, 12, 0, 0)
+        }
+        header.addView(healthBadgeText)
+        root.addView(header)
+
+        // MAIN CONTENT BODY
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(36, 32, 36, 48)
+        }
+        root.addView(body)
+
+        // 2. PROTECTION SETUP PILLS
+        val permRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        val btnMpesa = createActionButton("M-Pesa Reader", "#0F766E") {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
+        val btnBlocker = createActionButton("Crash Blocker", "#1E293B") {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+        val btnSpacer = View(this).apply { layoutParams = LinearLayout.LayoutParams(20, 1) }
+        permRow.addView(btnMpesa)
+        permRow.addView(btnSpacer)
+        permRow.addView(btnBlocker)
+        body.addView(permRow)
+
+        // 3. THREE METRIC CARDS (Money In | Living Out | Betting Loss)
+        val metricsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 28, 0, 24)
+        }
+
+        moneyInText = TextView(this)
+        moneyOutText = TextView(this)
+        gamblingLossText = TextView(this)
+
+        metricsRow.addView(createStatCard("MONEY IN", moneyInText, "#ECFDF5", "#047857"))
+        metricsRow.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(16, 1) })
+        metricsRow.addView(createStatCard("EXPENSES", moneyOutText, "#EFF6FF", "#1D4ED8"))
+        metricsRow.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(16, 1) })
+        metricsRow.addView(createStatCard("BETTING LOSS", gamblingLossText, "#FEF2F2", "#B91C1C"))
+        body.addView(metricsRow)
+
+        // 4. FINANCIAL ADVISOR CARD
+        val advisorCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = makePill("#FFFFFF", 28f)
+            setPadding(36, 32, 36, 32)
+            elevation = 4f
+        }
+        val advisorHeader = TextView(this).apply {
+            text = "Smart Financial Advisor"
+            textSize = 15f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#064E3B"))
+        }
+        adviceText = TextView(this).apply {
+            textSize = 14f
+            setTextColor(Color.parseColor("#334155"))
+            setPadding(0, 12, 0, 0)
+            setLineSpacing(6f, 1f)
+        }
+        advisorCard.addView(advisorHeader)
+        advisorCard.addView(adviceText)
+        body.addView(advisorCard)
+
+        // 5. LEDGER SECTION HEADER
+        val ledgerHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 40, 0, 16)
+        }
+        val ledgerTitle = TextView(this).apply {
+            text = "M-Pesa Cash Flow Ledger"
+            textSize = 17f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#0F172A"))
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val refreshBtn = TextView(this).apply {
+            text = "↻ Refresh"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#047857"))
+            setPadding(20, 12, 20, 12)
             setOnClickListener { refreshDashboard() }
         }
-        headerRow.addView(ledgerTitle)
-        headerRow.addView(refreshBtn)
-        root.addView(headerRow)
+        ledgerHeader.addView(ledgerTitle)
+        ledgerHeader.addView(refreshBtn)
+        body.addView(ledgerHeader)
 
         txContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, 16, 0, 0)
         }
-        root.addView(txContainer)
+        body.addView(txContainer)
 
         setContentView(scroll)
         refreshDashboard()
@@ -111,54 +196,151 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshDashboard() {
+        val txs = LocalFinanceStore.getAllTransactions(this)
+        val totalIn = txs.filter { it.direction == "IN" }.sumOf { it.amount }
         val totalLost = LocalFinanceStore.getTotalGamblingLoss(this)
-        lossText.text = "Total Tracked Betting Losses:\nKsh ${"%,.2f".format(totalLost)}"
-        adviceText.text = "Financial Advisor:\n${LocalFinanceStore.generateFinancialAdvice(this)}"
+        val livingOut = txs.filter { it.direction == "OUT" && it.category != "GAMBLING" }.sumOf { it.amount }
+        val net = totalIn - (livingOut + totalLost)
+
+        netBalanceText.text = "Ksh ${"%,.2f".format(net)}"
+        moneyInText.text = "Ksh ${"%,.0f".format(totalIn)}"
+        moneyOutText.text = "Ksh ${"%,.0f".format(livingOut)}"
+        gamblingLossText.text = "Ksh ${"%,.0f".format(totalLost)}"
+
+        healthBadgeText.text = when {
+            totalLost > 0 -> "⚠ Ksh ${"%,.0f".format(totalLost)} diverted to betting — blocker active"
+            totalIn > 0 -> "✓ 0% lost to gambling — keep building your surplus"
+            else -> "Ready to track M-Pesa & block crash games"
+        }
+
+        adviceText.text = LocalFinanceStore.generateFinancialAdvice(this)
 
         txContainer.removeAllViews()
-        val txs = LocalFinanceStore.getAllTransactions(this)
-
         if (txs.isEmpty()) {
-            txContainer.addView(TextView(this).apply {
-                text = "No M-Pesa messages captured yet. Once enabled, incoming M-Pesa notifications will appear here."
-                setPadding(0, 24, 0, 0)
-            })
+            val emptyCard = TextView(this).apply {
+                text = "No M-Pesa transactions recorded yet.\nEnable M-Pesa Reader above—new incoming and outgoing M-Pesa notifications will appear here automatically."
+                textSize = 14f
+                setTextColor(Color.parseColor("#64748B"))
+                background = makePill("#FFFFFF", 24f)
+                setPadding(36, 40, 36, 40)
+            }
+            txContainer.addView(emptyCard)
             return
         }
+
+        val timeFmt = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
 
         for (tx in txs) {
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setBackgroundColor(Color.parseColor("#F5F5F5"))
-                setPadding(24, 24, 24, 24)
+                background = makePill("#FFFFFF", 24f)
+                setPadding(32, 28, 32, 28)
+                elevation = 2f
             }
             val cardParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = 20 }
 
-            val topLine = TextView(this).apply {
-                text = "${tx.direction}: Ksh ${"%,.0f".format(tx.amount)}  •  [${tx.category}]"
-                setTypeface(null, Typeface.BOLD)
-                setTextColor(if (tx.category == "GAMBLING") Color.RED else Color.BLACK)
+            val topRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
             }
-            val subLine = TextView(this).apply {
-                text = tx.counterparty
-            }
-            card.addView(topLine)
-            card.addView(subLine)
 
+            val isIn = tx.direction == "IN"
+            val amountColor = when {
+                tx.category == "GAMBLING" -> "#DC2626"
+                isIn -> "#059669"
+                else -> "#0F172A"
+            }
+            val sign = if (isIn) "+" else "-"
+
+            val amountView = TextView(this).apply {
+                text = "$sign Ksh ${"%,.0f".format(tx.amount)}"
+                textSize = 17f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.parseColor(amountColor))
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+
+            val badgeBg = if (tx.category == "GAMBLING") "#FEE2E2" else if (tx.category == "UNCLASSIFIED") "#FEF3C7" else "#E2E8F0"
+            val badgeFg = if (tx.category == "GAMBLING") "#B91C1C" else if (tx.category == "UNCLASSIFIED") "#B45309" else "#334155"
+
+            val tagBadge = TextView(this).apply {
+                text = tx.category
+                textSize = 11f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.parseColor(badgeFg))
+                background = makePill(badgeBg, 16f)
+                setPadding(20, 8, 20, 8)
+            }
+            topRow.addView(amountView)
+            topRow.addView(tagBadge)
+            card.addView(topRow)
+
+            val partyView = TextView(this).apply {
+                text = "${tx.counterparty}  •  ${timeFmt.format(Date(tx.timestamp))}"
+                textSize = 13f
+                setTextColor(Color.parseColor("#64748B"))
+                setPadding(0, 8, 0, 0)
+            }
+            card.addView(partyView)
+
+            // Interactive Quick-Tag Chips + Custom Input for Unclassified Transactions
             if (tx.category == "UNCLASSIFIED") {
-                val inputRow = LinearLayout(this).apply {
+                val promptLabel = TextView(this).apply {
+                    text = "Describe this transaction:"
+                    textSize = 12f
+                    setTypeface(null, Typeface.BOLD)
+                    setTextColor(Color.parseColor("#475569"))
+                    setPadding(0, 20, 0, 10)
+                }
+                card.addView(promptLabel)
+
+                val chips = if (isIn) listOf("SALARY", "HUSTLE", "BUSINESS", "LOAN/GIFT")
+                else listOf("FOOD", "RENT/BILLS", "TRANSPORT", "FAMILY")
+
+                val chipRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                chips.forEach { label ->
+                    val chip = TextView(this).apply {
+                        text = label
+                        textSize = 11f
+                        setTypeface(null, Typeface.BOLD)
+                        setTextColor(Color.parseColor("#064E3B"))
+                        background = makePill("#D1FAE5", 16f)
+                        setPadding(18, 12, 18, 12)
+                        setOnClickListener {
+                            LocalFinanceStore.updateCategory(this@MainActivity, tx.id, label)
+                            refreshDashboard()
+                        }
+                    }
+                    val lp = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { rightMargin = 12 }
+                    chipRow.addView(chip, lp)
+                }
+                card.addView(chipRow)
+
+                val customRow = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
-                    setPadding(0, 12, 0, 0)
+                    setPadding(0, 16, 0, 0)
+                    gravity = Gravity.CENTER_VERTICAL
                 }
                 val editBox = EditText(this).apply {
-                    hint = "What was this for? (e.g. Lunch, Rent)"
+                    hint = "Or type custom note..."
+                    textSize = 13f
+                    background = makePill("#F1F5F9", 16f)
+                    setPadding(24, 18, 24, 18)
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 }
-                val saveBtn = Button(this).apply {
+                val saveBtn = TextView(this).apply {
                     text = "Save"
+                    textSize = 13f
+                    setTypeface(null, Typeface.BOLD)
+                    setTextColor(Color.WHITE)
+                    background = makePill("#064E3B", 16f)
+                    setPadding(32, 18, 32, 18)
                     setOnClickListener {
                         val note = editBox.text.toString().trim()
                         if (note.isNotEmpty()) {
@@ -167,12 +349,61 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
-                inputRow.addView(editBox)
-                inputRow.addView(saveBtn)
-                card.addView(inputRow)
+                val saveLp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { leftMargin = 12 }
+                customRow.addView(editBox)
+                customRow.addView(saveBtn, saveLp)
+                card.addView(customRow)
             }
 
             txContainer.addView(card, cardParams)
+        }
+    }
+
+    private fun createStatCard(label: String, valueView: TextView, bgHex: String, fgHex: String): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = makePill(bgHex, 24f)
+            setPadding(24, 24, 24, 24)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+
+            addView(TextView(this@MainActivity).apply {
+                text = label
+                textSize = 10f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.parseColor(fgHex))
+            })
+            valueView.apply {
+                text = "Ksh 0"
+                textSize = 14f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.parseColor(fgHex))
+                setPadding(0, 8, 0, 0)
+            }
+            addView(valueView)
+        }
+    }
+
+    private fun createActionButton(label: String, bgHex: String, onClick: () -> Unit): TextView {
+        return TextView(this).apply {
+            text = label
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = makePill(bgHex, 24f)
+            setPadding(24, 28, 24, 28)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            setOnClickListener { onClick() }
+        }
+    }
+
+    private fun makePill(hexColor: String, radius: Float): GradientDrawable {
+        return GradientDrawable().apply {
+            setColor(Color.parseColor(hexColor))
+            cornerRadius = radius
         }
     }
 }
