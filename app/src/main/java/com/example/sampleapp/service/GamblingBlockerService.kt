@@ -13,15 +13,13 @@ class GamblingBlockerService : AccessibilityService() {
 
     private var lastTriggerTime = 0L
     private var lastPageScanTime = 0L
+    private var lastLockLaunchTime = 0L
 
-    // Comprehensive list of Kenyan betting operators & global crash games
     private val blockedKeywords = listOf(
-        // Crash & Instant Games
         "aviator", "aviatrix", "jetx", "lucky jet", "spaceman", "zeppelin",
         "rocketman", "rocket queen", "crashx", "crash game", "big bass crash",
         "high flyer", "plinko", "mines", "chicken road", "penalty shoot",
         "spribe", "smartsoft", "turbo games", "evoplay", "galaxsys",
-        // Kenyan & African Betting Sites
         "betika", "odibets", "sportpesa", "mozzartbet", "1xbet", "22bet",
         "betway", "melbet", "paripesa", "helabet", "bangbet", "shabiki",
         "hakibets", "kwikbet", "betlion", "chezacash", "maybets", "kilibet",
@@ -29,7 +27,6 @@ class GamblingBlockerService : AccessibilityService() {
         "winpesa", "mcheza", "gamemania", "scorepesa", "pesaplay"
     )
 
-    // Hidden URL patterns used when sites mask crash games (e.g. /game-2, /casino/crash)
     private val hiddenGameUrlPatterns = listOf(
         "/game-2", "/game/2", "/crash", "/instant-win", "/virtuals",
         "/casino/play", "/live-casino", "/spribe", "/mini-games", "/turbo"
@@ -44,32 +41,27 @@ class GamblingBlockerService : AccessibilityService() {
         "com.brave.browser:id/url_bar"
     )
 
-    private val protectedSystemPackages = listOf(
-        "com.android.settings",
-        "android",
-        "com.miui.securitycenter",
-        "com.samsung.android.lool",
-        "com.transsion.phonemaster"
+    private val browserPackages = listOf(
+        "com.android.chrome",
+        "com.opera.browser",
+        "com.opera.mini.native",
+        "com.sec.android.app.sbrowser",
+        "org.mozilla.firefox",
+        "com.brave.browser"
     )
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val rootNode = rootInActiveWindow ?: return
         val pkgName = rootNode.packageName?.toString() ?: ""
 
-        // 0. ACCOUNTABILITY GUARD: Block Device Admin deactivation, Accessibility toggle, & App Info
-        if (pkgName in protectedSystemPackages &&
+        // 0. ACCOUNTABILITY GUARD: Runs on ANY non-browser/non-SafePesa system screen (catches all OEM Settings & Device Admin dialogs)
+        if (pkgName !in browserPackages &&
+            pkgName != packageName &&
             LocalFinanceStore.hasPartnerPin(this) &&
             !LocalFinanceStore.isTemporarilyUnlocked(this)
         ) {
             if (isTryingToTamperWithSafePesa(rootNode, 0)) {
-                performGlobalAction(GLOBAL_ACTION_BACK)
-                Handler(Looper.getMainLooper()).postDelayed({
-                    performGlobalAction(GLOBAL_ACTION_BACK)
-                }, 100)
-                val lockIntent = Intent(this, PartnerPinLockActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                }
-                startActivity(lockIntent)
+                blockTamperingImmediately()
                 return
             }
         }
@@ -102,8 +94,26 @@ class GamblingBlockerService : AccessibilityService() {
         }
     }
 
+    private fun blockTamperingImmediately() {
+        val now = System.currentTimeMillis()
+        if (now - lastLockLaunchTime < 1500) return
+        lastLockLaunchTime = now
+
+        // Force-exit Settings/Device Admin dialog straight to the Home screen (cannot be blocked by Android)
+        performGlobalAction(GLOBAL_ACTION_BACK)
+        performGlobalAction(GLOBAL_ACTION_HOME)
+
+        // Launch the Partner PIN Lock screen right after returning to Home
+        Handler(Looper.getMainLooper()).postDelayed({
+            val lockIntent = Intent(this, PartnerPinLockActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            startActivity(lockIntent)
+        }, 200)
+    }
+
     private fun isTryingToTamperWithSafePesa(node: AccessibilityNodeInfo?, depth: Int): Boolean {
-        if (node == null || depth > 12) return false
+        if (node == null || depth > 14) return false
         val text = node.text?.toString()?.lowercase() ?: ""
         val desc = node.contentDescription?.toString()?.lowercase() ?: ""
 
@@ -113,8 +123,8 @@ class GamblingBlockerService : AccessibilityService() {
             "crash-game blocker",
             "m-pesa reader",
             "device admin",
-            "deactivate this device admin",
-            "deactivate & uninstall"
+            "deactivate",
+            "accountability shield"
         )
         if (tamperWords.any { text.contains(it) || desc.contains(it) }) {
             return true
