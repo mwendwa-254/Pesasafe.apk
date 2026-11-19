@@ -6,6 +6,7 @@
 
     <application
         android:allowBackup="false"
+        android:icon="@mipmap/ic_safepesa
         android:label="SafePesa Recovery"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
