@@ -3,16 +3,11 @@ package com.example.sampleapp.service
 import android.accessibilityservice.AccessibilityService
 import android.os.Handler
 import android.os.Looper
-import android.speech.tts.TextToSpeech
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.widget.Toast
-import com.example.sampleapp.data.LocalFinanceStore
-import java.util.Locale
 
-class GamblingBlockerService : AccessibilityService(), TextToSpeech.OnInitListener {
+class GamblingBlockerService : AccessibilityService() {
 
-    private var tts: TextToSpeech? = null
     private var lastTriggerTime = 0L
 
     private val blockedKeywords = listOf(
@@ -21,61 +16,60 @@ class GamblingBlockerService : AccessibilityService(), TextToSpeech.OnInitListen
         "betway", "melbet", "bangbet", "helabet", "shabiki", "hakibets"
     )
 
-    override fun onServiceConnected() {
-        super.onServiceConnected()
-        tts = TextToSpeech(this, this)
-    }
-
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) tts?.language = Locale.US
-    }
+    // Known browser address bar view IDs
+    private val addressBarIds = listOf(
+        "com.android.chrome:id/url_bar",
+        "com.opera.browser:id/url_field",
+        "com.opera.mini.native:id/url_field",
+        "com.sec.android.app.sbrowser:id/location_bar_edit_text",
+        "org.mozilla.firefox:id/mozac_browser_toolbar_url_view",
+        "com.brave.browser:id/url_bar"
+    )
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val rootNode = rootInActiveWindow ?: return
-        if (containsGamblingContent(rootNode)) triggerIntervention()
-    }
 
-    private fun containsGamblingContent(node: AccessibilityNodeInfo?): Boolean {
-        if (node == null) return false
-        val text = node.text?.toString()?.lowercase() ?: ""
-        val desc = node.contentDescription?.toString()?.lowercase() ?: ""
+        for (viewId in addressBarIds) {
+            val nodes = rootNode.findAccessibilityNodeInfosByViewId(viewId)
+            for (node in nodes) {
+                val urlText = node.text?.toString()?.lowercase()?.trim() ?: continue
+                if (urlText.isEmpty() || urlText.startsWith("search or type")) continue
 
-        if (blockedKeywords.any { text.contains(it) || desc.contains(it) }) return true
-
-        for (i in 0 until node.childCount) {
-            if (containsGamblingContent(node.getChild(i))) return true
+                if (blockedKeywords.any { urlText.contains(it) }) {
+                    closeCurrentTabSilently(rootNode)
+                    return
+                }
+            }
         }
-        return false
     }
 
-    private fun triggerIntervention() {
+    private fun closeCurrentTabSilently(rootNode: AccessibilityNodeInfo) {
         val now = System.currentTimeMillis()
-        if (now - lastTriggerTime < 2500) return
+        if (now - lastTriggerTime < 2000) return
         lastTriggerTime = now
 
-        val totalLost = LocalFinanceStore.getTotalGamblingLoss(this)
-        val warningMsg = if (totalLost > 0) {
-            "Stop! Crash games are blocked. You have already lost ${totalLost.toInt()} shillings to betting."
-        } else {
-            "Stop! Gambling and crash games are blocked to protect your money."
-        }
-
-        tts?.speak(warningMsg, TextToSpeech.QUEUE_FLUSH, null, "BLOCK_ALERT")
-
-        Handler(Looper.getMainLooper()).post {
-            Toast.makeText(applicationContext, warningMsg, Toast.LENGTH_LONG).show()
-        }
-
+        // Step 1: Back out of the address bar / loading page
         performGlobalAction(GLOBAL_ACTION_BACK)
+
+        // Step 2: Open Chrome's Tab Switcher and click the 'X' close button on the tab
         Handler(Looper.getMainLooper()).postDelayed({
-            performGlobalAction(GLOBAL_ACTION_HOME)
+            val currentRoot = rootInActiveWindow ?: return@postDelayed
+            val tabSwitcher = currentRoot.findAccessibilityNodeInfosByViewId("com.android.chrome:id/tab_switcher_button")
+
+            if (!tabSwitcher.isNullOrEmpty()) {
+                tabSwitcher[0].performAction(AccessibilityNodeInfo.ACTION_CLICK)
+
+                Handler(Looper.getMainLooper()).postDelayed({
+                    val switcherRoot = rootInActiveWindow ?: return@postDelayed
+                    val closeButtons = switcherRoot.findAccessibilityNodeInfosByViewId("com.android.chrome:id/action_button")
+                    if (!closeButtons.isNullOrEmpty()) {
+                        // Closes the active gambling tab while keeping Chrome open
+                        closeButtons[0].performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    }
+                }, 300)
+            }
         }, 250)
     }
 
     override fun onInterrupt() {}
-
-    override fun onDestroy() {
-        tts?.shutdown()
-        super.onDestroy()
-    }
 }
