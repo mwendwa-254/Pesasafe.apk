@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
 
     <application
         android:allowBackup="false"
@@ -21,6 +23,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Instant Floating Transaction Labeling Pop-Up -->
+        <activity
+            android:name=".QuickTagPopupActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:theme="@style/Theme.AppCompat.Light.Dialog.Alert" />
 
         <!-- Partner PIN Lock Screen -->
         <activity
@@ -44,7 +54,17 @@
             </intent-filter>
         </receiver>
 
-        <!-- 1. Offline M-Pesa Notification Listener -->
+        <!-- Direct GSM SMS Receiver (Works regardless of default SMS app) -->
+        <receiver
+            android:name=".service.MpesaSmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Offline M-Pesa Notification Listener (Backup) -->
         <service
             android:name=".service.MpesaNotificationService"
             android:exported="true"
@@ -55,7 +75,7 @@
             </intent-filter>
         </service>
 
-        <!-- 2. Non-VPN Crash Game & Settings Guard -->
+        <!-- Non-VPN Crash Game & Settings Guard -->
         <service
             android:name=".service.GamblingBlockerService"
             android:exported="true"
