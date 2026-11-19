@@ -1,5 +1,10 @@
 package com.example.sampleapp
 
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.text.InputType
+import androidx.appcompat.app.AlertDialog
+import com.example.sampleapp.service.SafePesaAdminReceiver
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -115,6 +120,17 @@ class MainActivity : AppCompatActivity() {
         permRow.addView(btnSpacer)
         permRow.addView(btnBlocker)
         body.addView(permRow)
+        val btnPartnerLock = createActionButton(
+            if (LocalFinanceStore.hasPartnerPin(this)) "🔒 Accountability Shield Active" else "Set Accountability Partner PIN",
+            "#B45309"
+        ) {
+            showPartnerPinSetupDialog()
+        }
+        val lockBtnLp = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = 16 }
+        body.addView(btnPartnerLock, lockBtnLp)
 
         // 3. THREE METRIC CARDS (Money In | Living Out | Betting Loss)
         val metricsRow = LinearLayout(this).apply {
@@ -405,5 +421,41 @@ class MainActivity : AppCompatActivity() {
             setColor(Color.parseColor(hexColor))
             cornerRadius = radius
         }
+    }
+    private fun showPartnerPinSetupDialog() {
+        if (LocalFinanceStore.hasPartnerPin(this) && !LocalFinanceStore.isTemporarilyUnlocked(this)) {
+            startActivity(Intent(this, PartnerPinLockActivity::class.java))
+            return
+        }
+
+        val input = EditText(this).apply {
+            hint = "Partner creates 4-6 digit PIN"
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            setPadding(40, 32, 40, 32)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Accountability Partner Setup")
+            .setMessage("Hand your phone to your accountability partner. Once they set a PIN and activate Uninstall Protection, SafePesa cannot be uninstalled or disabled without their PIN.")
+            .setView(input)
+            .setPositiveButton("Activate Shield") { _, _ ->
+                val pin = input.text.toString().trim()
+                if (pin.length >= 4) {
+                    LocalFinanceStore.setPartnerPin(this, pin)
+                    val adminComponent = ComponentName(this, SafePesaAdminReceiver::class.java)
+                    val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+                        putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
+                        putExtra(
+                            DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                            "Prevents uninstalling SafePesa without your accountability partner's PIN."
+                        )
+                    }
+                    startActivity(intent)
+                } else {
+                    Toast.makeText(this, "PIN must be at least 4 digits", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 }
