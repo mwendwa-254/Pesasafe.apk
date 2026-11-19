@@ -437,26 +437,41 @@ class MainActivity : AppCompatActivity() {
 
         AlertDialog.Builder(this)
             .setTitle("Accountability Partner Setup")
-            .setMessage("Hand your phone to your accountability partner. Once they set a PIN and activate Uninstall Protection, SafePesa cannot be uninstalled or disabled without their PIN.")
+            .setMessage("Hand your phone to your accountability partner. Once they set a PIN and enable Overlay + Uninstall Protection, SafePesa cannot be uninstalled or disabled without their PIN.")
             .setView(input)
             .setPositiveButton("Activate Shield") { _, _ ->
                 val pin = input.text.toString().trim()
                 if (pin.length >= 4) {
                     LocalFinanceStore.setPartnerPin(this, pin)
-                    val adminComponent = ComponentName(this, SafePesaAdminReceiver::class.java)
-                    val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
-                        putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
-                        putExtra(
-                            DevicePolicyManager.EXTRA_ADD_EXPLANATION,
-                            "Prevents uninstalling SafePesa without your accountability partner's PIN."
+
+                    // Automatically request "Display over other apps" first if not yet granted
+                    if (!Settings.canDrawOverlays(this)) {
+                        Toast.makeText(this, "Step 1: Turn ON 'Allow display over other apps' for SafePesa", Toast.LENGTH_LONG).show()
+                        val overlayIntent = Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName")
                         )
+                        startActivity(overlayIntent)
+                    } else {
+                        launchDeviceAdminPrompt()
                     }
-                    startActivity(intent)
                 } else {
                     Toast.makeText(this, "PIN must be at least 4 digits", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun launchDeviceAdminPrompt() {
+        val adminComponent = ComponentName(this, SafePesaAdminReceiver::class.java)
+        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+            putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
+            putExtra(
+                DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                "Prevents uninstalling SafePesa without your accountability partner's PIN."
+            )
+        }
+        startActivity(intent)
     }
 }
