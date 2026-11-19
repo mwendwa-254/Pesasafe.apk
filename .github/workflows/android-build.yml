@@ -24,11 +24,26 @@ jobs:
           gradle-version: '8.7'
           validate-wrappers: false
 
-      - name: Build Debug APK
+      - name: Create Persistent Signing Keystore
+        run: |
+          mkdir -p ~/.android
+          rm -f ~/.android/debug.keystore
+          keytool -genkeypair -v \
+            -keystore ~/.android/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -startdate "2025/01/01 00:00:00" \
+            -dname "CN=SafePesa,O=SafePesa,C=KE"
+
+      - name: Build Signed APK
         run: gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SafePesa-APK
+          name: SafePesa-APK-v${{ github.run_number }}
           path: app/build/outputs/apk/debug/*.apk
