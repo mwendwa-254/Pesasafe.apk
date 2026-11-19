@@ -1,9 +1,11 @@
 package com.example.sampleapp.service
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -19,43 +21,91 @@ class MpesaNotificationService : NotificationListenerService() {
     private val gamblingKeywords = listOf(
         "sportpesa", "betika", "odibets", "mozzart", "1xbet", "betway",
         "melbet", "paripesa", "helabet", "bangbet", "shabiki", "aviator",
-        "pepesha", "hakibets", "kwikbet", "290290", "290500", "290680", "290020"
+        "pepesha", "hakibets", "kwikbet", "betpawa", "22bet", "betlion",
+        "290290", "290500", "290680", "290020", "290007", "290111"
     )
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        // Automatically ask Android to reconnect the listener if the system drops it
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            requestRebind(ComponentName(this, MpesaNotificationService::class.java))
+        }
+    }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val notification = sbn?.notification ?: return
-        val extras = notification.extras
-        val title = extras.getString("android.title")?.lowercase() ?: ""
-        val text = extras.getString("android.text") ?: return
+        val extras = notification.extras ?: return
 
-        if (!title.contains("mpesa") && !title.contains("m-pesa") && !text.contains("Confirmed.")) return
-        parseAndSaveMpesa(text)
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""
+        val shortText = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim() ?: ""
+        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim() ?: ""
+
+        // Prefer bigText (full SMS body in Google Messages/Samsung Messages) over truncated shortText
+        val fullBody = if (bigText.length >= shortText.length) bigText else shortText
+        if (fullBody.isEmpty()) return
+
+        val lowerTitle = title.lowercase()
+        val lowerBody = fullBody.lowercase()
+
+        // Match either by sender title ("MPESA" / "M-PESA") OR by M-Pesa message signature ("confirmed." + "ksh")
+        val isMpesaSender = lowerTitle.contains("mpesa") || lowerTitle.contains("m-pesa")
+        val isMpesaBody = lowerBody.contains("confirmed") && lowerBody.contains("ksh")
+
+        if (!isMpesaSender && !isMpesaBody) return
+
+        parseAndSaveMpesa(fullBody)
     }
 
     private fun parseAndSaveMpesa(msg: String) {
-        val codeMatcher = Pattern.compile("^([A-Z0-9]{10})\\s+Confirmed").matcher(msg)
-        val txId = if (codeMatcher.find()) codeMatcher.group(1) ?: return else return
+        // 1. Extract 10-character transaction code (e.g. SL82K9X12P Confirmed)
+        val codeMatcher = Pattern.compile("\\b([A-Z0-9]{10})\\s+Confirmed", Pattern.CASE_INSENSITIVE).matcher(msg)
+        val txId = if (codeMatcher.find()) {
+            codeMatcher.group(1)?.uppercase() ?: return
+        } else {
+            // Fallback ID if message format is unusual
+            "TX${System.currentTimeMillis() % 100000000}"
+        }
 
-        val amountMatcher = Pattern.compile("Ksh([0-9,]+\\.\\d{2})").matcher(msg)
+        // 2. Extract first Ksh amount (supports both "Ksh500.00" and "Ksh 500.00")
+        val amountMatcher = Pattern.compile("Ksh\\s*([0-9,]+(?:\\.\\d{1,2})?)", Pattern.CASE_INSENSITIVE).matcher(msg)
         val amount = if (amountMatcher.find()) {
             amountMatcher.group(1)?.replace(",", "")?.toDoubleOrNull() ?: 0.0
         } else 0.0
 
-        val isIncoming = msg.contains("You have received", ignoreCase = true) ||
-                msg.contains("Give Ksh", ignoreCase = true)
+        if (amount <= 0.0) return
+
+        // 3. Determine Money IN vs Money OUT
+        val lowerMsg = msg.lowercase()
+        val isIncoming = lowerMsg.contains("you have received") ||
+                lowerMsg.contains("give ksh") ||
+                lowerMsg.contains("deposited") ||
+                lowerMsg.contains("reversed")
         val direction = if (isIncoming) "IN" else "OUT"
 
-        val lowerMsg = msg.lowercase()
+        // 4. Flag gambling deposits automatically
         val isGambling = !isIncoming && gamblingKeywords.any { lowerMsg.contains(it) }
         val category = if (isGambling) "GAMBLING" else "UNCLASSIFIED"
 
-        val toRegex = Pattern.compile("(?:sent to|paid to|from)\\s+([A-Za-z0-9\\s.&-]+?)(?:\\s+on|\\s+for|\\.\\s)").matcher(msg)
-        val counterparty = if (toRegex.find()) toRegex.group(1)?.trim() ?: "M-Pesa Transaction" else "M-Pesa Transaction"
+        // 5. Extract counterparty (person, Paybill, or Till name)
+        val toRegex = Pattern.compile(
+            "(?:sent to|paid to|from|bought airtime|withdraw\\s+ksh[0-9,.]+\\s+from)\\s+([A-Za-z0-9\\s.&'-]+?)(?:\\s+on|\\s+for|\\s+new|\\.|\\n|$)",
+            Pattern.CASE_INSENSITIVE
+        ).matcher(msg)
+        val counterparty = if (toRegex.find()) {
+            toRegex.group(1)?.trim()?.take(40) ?: "M-Pesa Transaction"
+        } else if (lowerMsg.contains("airtime")) {
+            "Airtime Purchase"
+        } else {
+            "M-Pesa Transaction"
+        }
 
         val tx = MpesaTx(txId, direction, amount, counterparty, category, System.currentTimeMillis())
         LocalFinanceStore.saveTransaction(this, tx)
 
-        if (!isGambling) promptUserToDescribeTransaction(tx)
+        if (!isGambling) {
+            promptUserToDescribeTransaction(tx)
+        }
     }
 
     private fun promptUserToDescribeTransaction(tx: MpesaTx) {
@@ -68,13 +118,14 @@ class MpesaNotificationService : NotificationListenerService() {
             )
         }
 
-        val categories = if (tx.direction == "IN") listOf("SALARY/HUSTLE", "GIFT/LOAN", "BUSINESS")
-        else listOf("FOOD/SHOPPING", "BILLS/RENT", "TRANSPORT")
+        val categories = if (tx.direction == "IN") listOf("SALARY", "HUSTLE", "BUSINESS")
+        else listOf("FOOD", "RENT/BILLS", "TRANSPORT")
 
         val builder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("M-Pesa ${tx.direction}: Ksh ${"%,.0f".format(tx.amount)}")
-            .setContentText("Describe this transaction (${tx.counterparty}):")
+            .setContentText("Describe this (${tx.counterparty}):")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
 
         categories.forEachIndexed { index, cat ->
